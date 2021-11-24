@@ -18,19 +18,17 @@ const doc = new jsPDF()
 /* Variables */
 let px2mmRatio
 
-/* Initialize */
+/* Core */
 window.html2canvas(htmlElement).then(root => {
   console.log('root', root)
   setPx2mmRatio(root.bounds.width)
-  saveAsPdf(root)
+  renderElment(root)
+  setTimeout(_ => {
+    // doc.save('a4.pdf')
+  }, 0)
 })
 
-/* Core functions */
-function saveAsPdf (root) {
-  renderElment(root)
-  // doc.save('a4.pdf')
-}
-
+/* Render functions */
 function renderElment (element) {
   // console.log('element', element)
   const {
@@ -42,7 +40,6 @@ function renderElment (element) {
   elements.forEach(renderElment)
 }
 
-/* Render functions */
 function renderBackgroundColor (properties) {
   const {
     left, top, width, height, backgroundColor
@@ -68,12 +65,42 @@ function renderImage (properties) {
     left, top, width, height, src
   } = properties
   if (!src) return
-  // todo
-  doc.addImage(
-    src, 'SVG',
-    transformLeft(left), transformTop(top),
-    transformSize(width), transformSize(height)
-  )
+  // console.log('src', src)
+  const isDataImage = /^data\:image/.test(src)
+  if (isDataImage) {
+    const [, imageType] = src.match(/^data\:image\/(.+)\;/)
+    switch (imageType) {
+      case 'jpeg':
+      case 'png':
+      case 'webp':
+        _addImage(src, imageType.toUpperCase())
+        break
+      case 'svg+xml': {
+        const body = document.querySelector('body')
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        const image = new Image()
+        canvas.style.display = 'none'
+        canvas.width = width
+        canvas.height = height
+        body.appendChild(canvas)
+        image.onload = _ => {
+          ctx.drawImage(image, 0, 0, width, height)
+          _addImage(canvas, 'PNG')
+        }
+        image.src = src
+        break
+      }
+    }
+  } else {}
+
+  function _addImage (imageData, format) {
+    doc.addImage(
+      imageData, format,
+      transformLeft(left), transformTop(top),
+      transformSize(width), transformSize(height)
+    )
+  }
 }
 
 /* Utility functions */
