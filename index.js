@@ -24,7 +24,7 @@ window.html2canvas(htmlElement).then(root => {
   setPx2mmRatio(root.bounds.width)
   renderElment(root)
   setTimeout(_ => {
-    // doc.save('a4.pdf')
+    doc.save('a4.pdf')
   }, 0)
 })
 
@@ -34,9 +34,12 @@ function renderElment (element) {
   const {
     bounds, elements, src, styles, textNodes
   } = element
-  const {backgroundColor} = styles
+  const {
+    backgroundColor, color, fontSize, lineHeight
+  } = styles
   renderBackgroundColor({...bounds, backgroundColor})
   renderImage({...bounds, src})
+  renderText({textNodes, color, fontSize, lineHeight})
   elements.forEach(renderElment)
 }
 
@@ -45,14 +48,7 @@ function renderBackgroundColor (properties) {
     left, top, width, height, backgroundColor
   } = properties
   if (!backgroundColor) return
-  let hexBackgroundColor = backgroundColor.toString(16)
-  if (hexBackgroundColor.length < 8) {
-    const lackLength = 8 - hexBackgroundColor.length
-    hexBackgroundColor = `${' '.repeat(lackLength)}${hexBackgroundColor}`
-  }
-  const r = parseInt(hexBackgroundColor.slice(0, 2), 16)
-  const g = parseInt(hexBackgroundColor.slice(2, 4), 16)
-  const b = parseInt(hexBackgroundColor.slice(4, 6), 16)
+  const {r, g, b} = color2rgb(backgroundColor)
   doc.setFillColor(r, g, b)
   doc.context2d.fillRect(
     transformLeft(left), transformTop(top),
@@ -103,6 +99,27 @@ function renderImage (properties) {
   }
 }
 
+function renderText (properties) {
+  const {
+    textNodes, color, fontSize, lineHeight
+  } = properties
+  if (!textNodes.length) return
+  textNodes.forEach(textNode => {
+    const {text, textBounds} = textNode
+    const {top, left} = textBounds[0].bounds
+    const {r, g, b} = color2rgb(color)
+    const pxFontSize = fontSize2px(fontSize)
+    const pxLineHeight = fontSize2px(lineHeight)
+    const lineHeightFactor = pxLineHeight / pxFontSize
+    doc.setTextColor(r, g, b)
+    doc.setFontSize(transformSize2pt(pxFontSize))
+    doc.text(
+      text, transformLeft(left), transformTop(top),
+      {baseline: 'top', lineHeightFactor}
+    )
+  })
+}
+
 /* Utility functions */
 function setPx2mmRatio (width) {
   const pdfContentWidth = pdfSize.width - (
@@ -126,4 +143,27 @@ function transformTop (px) {
 function transformSize (px) {
   const mm = px * px2mmRatio
   return mm
+}
+
+function transformSize2pt (px) {
+  const mm = transformSize(px)
+  const pt = mm * 2.8346456693
+  return pt
+}
+
+function fontSize2px (fontSize) {
+  const {number, unit} = fontSize
+  return number
+}
+
+function color2rgb (color) {
+  let hexColor = color.toString(16)
+  if (hexColor.length < 8) {
+    const lackLength = 8 - hexColor.length
+    hexColor = `${'0'.repeat(lackLength)}${hexColor}`
+  }
+  const r = parseInt(hexColor.slice(0, 2), 16)
+  const g = parseInt(hexColor.slice(2, 4), 16)
+  const b = parseInt(hexColor.slice(4, 6), 16)
+  return {r, g, b}
 }
