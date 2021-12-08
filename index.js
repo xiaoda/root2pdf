@@ -22,7 +22,7 @@ let offsetTop
 
 /* Core */
 window.html2canvas(htmlElement).then(root => {
-  console.log('root', root)
+  console.log('root:', root)
   setPx2mmRatio(root.bounds.width)
   setOffset(htmlElement)
   renderElment(root)
@@ -36,15 +36,10 @@ function renderElment (element) {
   const {
     bounds, elements, src, styles, textNodes
   } = element
-  const {
-    backgroundColor, color, fontSize, lineHeight
-  } = styles
-  renderBackgroundColor({...bounds, backgroundColor})
-  renderImage({...bounds, src})
-  renderText({
-    ...bounds, textNodes,
-    color, fontSize, lineHeight
-  })
+  renderBackgroundColor({...bounds, ...styles})
+  renderBorder({...bounds, ...styles})
+  renderImage({...bounds, ...styles, src})
+  renderText({...bounds, ...styles, textNodes})
   elements.forEach(renderElment)
 }
 
@@ -61,12 +56,23 @@ function renderBackgroundColor (properties) {
   )
 }
 
+function renderBorder (properties) {
+  const {
+    left, top, width, height,
+    borderTopColor, borderTopWidth,
+    borderLeftColor, borderLeftWidth,
+    borderRightColor, borderRightWidth,
+    borderBottomColor, borderBottomWidth
+  } = properties
+  // todo
+}
+
 function renderImage (properties) {
   const {
     left, top, width, height, src
   } = properties
   if (!src) return
-  // console.log('src', src)
+  // console.log('src:', src)
   const isDataImage = /^data\:image/.test(src)
   if (isDataImage) {
     const [, imageType] = src.match(/^data\:image\/(.+)\;/)
@@ -111,22 +117,20 @@ function renderText (properties) {
   } = properties
   if (!textNodes.length) return
   textNodes.forEach(textNode => {
-    let {text, textBounds} = textNode
-    const {top, left} = textBounds[0].bounds
+    const {textBounds} = textNode
     const {r, g, b} = color2rgb(color)
     const pxFontSize = fontSize2px(fontSize)
-    const pxLineHeight = fontSize2px(lineHeight)
-    const lineHeightFactor = pxLineHeight / pxFontSize
-    const maxWidth = transformSize(width)
-    text = text.replace(/\n/g, '')
     doc.setTextColor(r, g, b)
     doc.setFontSize(transformSize2pt(pxFontSize))
-    doc.text(
-      text, transformLeft(left), transformTop(top), {
-        baseline: 'top',
-        lineHeightFactor, maxWidth
-      }
-    )
+    textBounds.forEach(textBound => {
+      const {text, bounds} = textBound
+      const {left, top} = bounds
+      doc.text(
+        text, transformLeft(left), transformTop(top), {
+          baseline: 'top',
+        }
+      )
+    })
   })
 }
 
