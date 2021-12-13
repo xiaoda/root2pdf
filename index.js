@@ -19,15 +19,17 @@ const doc = new jsPDF()
 let px2mmRatio
 let offsetLeft
 let offsetTop
+let textRenderingQueue = []
 
 /* Core */
 window.html2canvas(htmlElement).then(root => {
-  console.log('root:', root)
+  console.log('ROOT >>>', root)
   setPx2mmRatio(root.bounds.width)
   setOffset(htmlElement)
   renderElment(root)
+  renderAllText()
   setTimeout(_ => {
-    // doc.save('a4.pdf')
+    doc.save('a4.pdf')
   }, 0)
 })
 
@@ -39,7 +41,7 @@ function renderElment (element) {
   renderBackgroundColor({...bounds, ...styles})
   renderBorder({...bounds, ...styles})
   renderImage({...bounds, ...styles, src})
-  renderText({...bounds, ...styles, textNodes})
+  prepareTextRendering({...styles, textNodes})
   elements.forEach(renderElment)
 }
 
@@ -59,12 +61,51 @@ function renderBackgroundColor (properties) {
 function renderBorder (properties) {
   const {
     left, top, width, height,
-    borderTopColor, borderTopWidth,
-    borderLeftColor, borderLeftWidth,
-    borderRightColor, borderRightWidth,
-    borderBottomColor, borderBottomWidth
+    borderTopWidth, borderTopColor,
+    borderLeftWidth, borderLeftColor,
+    borderRightWidth, borderRightColor,
+    borderBottomWidth, borderBottomColor
   } = properties
-  // todo
+  if (borderTopWidth) {
+    const {r, g, b} = color2rgb(borderTopColor)
+    doc.setFillColor(r, g, b)
+    doc.context2d.fillRect(
+      transformLeft(left),
+      transformTop(top),
+      transformSize(width),
+      transformSize(borderTopWidth)
+    )
+  }
+  if (borderLeftWidth) {
+    const {r, g, b} = color2rgb(borderLeftColor)
+    doc.setFillColor(r, g, b)
+    doc.context2d.fillRect(
+      transformLeft(left),
+      transformTop(top),
+      transformSize(borderLeftWidth),
+      transformSize(height)
+    )
+  }
+  if (borderRightWidth) {
+    const {r, g, b} = color2rgb(borderRightColor)
+    doc.setFillColor(r, g, b)
+    doc.context2d.fillRect(
+      transformLeft(left + width - borderRightWidth),
+      transformTop(top),
+      transformSize(borderRightWidth),
+      transformSize(height)
+    )
+  }
+  if (borderBottomWidth) {
+    const {r, g, b} = color2rgb(borderBottomColor)
+    doc.setFillColor(r, g, b)
+    doc.context2d.fillRect(
+      transformLeft(left),
+      transformTop(top + height - borderBottomWidth),
+      transformSize(width),
+      transformSize(borderBottomWidth)
+    )
+  }
 }
 
 function renderImage (properties) {
@@ -72,7 +113,7 @@ function renderImage (properties) {
     left, top, width, height, src
   } = properties
   if (!src) return
-  // console.log('src:', src)
+
   const isDataImage = /^data\:image/.test(src)
   if (isDataImage) {
     const [, imageType] = src.match(/^data\:image\/(.+)\;/)
@@ -110,31 +151,56 @@ function renderImage (properties) {
   }
 }
 
-function renderText (properties) {
-  const {
-    width, textNodes,
-    color, fontSize, lineHeight
-  } = properties
+function prepareTextRendering (properties) {
+  const {textNodes, color, fontSize} = properties
   if (!textNodes.length) return
+  const {r, g, b} = color2rgb(color)
+  const pxFontSize = fontSize2px(fontSize)
   textNodes.forEach(textNode => {
-    const {textBounds} = textNode
-    const {r, g, b} = color2rgb(color)
-    const pxFontSize = fontSize2px(fontSize)
+    const {text, textBounds} = textNode
+    const {left, top} = textBounds[0].bounds
+    const textRenderingItem = {
+      text, textBounds, left, top,
+      color: {r, g, b},
+      fontSize: pxFontSize
+    }
+    textRenderingQueue.push(textRenderingItem)
+  })
+}
+
+function renderAllText () {
+  const sortedQueue = textRenderingQueue.sort((a, b) => {
+    const condition = (
+      _almostSameTop(a.top, b.top, a.fontSize, b.fontSize) ?
+      a.left - b.left :
+      a.top - b.top
+    )
+    return condition
+  })
+  sortedQueue.forEach(queueItem => {
+    const {color, fontSize, textBounds} = queueItem
+    const {r, g, b} = color
     doc.setTextColor(r, g, b)
-    doc.setFontSize(transformSize2pt(pxFontSize))
+    doc.setFontSize(transformSize2pt(fontSize))
     textBounds.forEach(textBound => {
-      const {text, bounds} = textBound
-      const {left, top} = bounds
+      let {text, bounds} = textBound
+      const {left, top, width, height} = bounds
+      const x = left + width / 2
       doc.text(
-        text, transformLeft(left), transformTop(top), {
-          baseline: 'top',
+        text, transformLeft(x), transformTop(top), {
+          align: 'center',
+          baseline: 'top'
         }
       )
     })
   })
+
+  function _almostSameTop (top1, top2, fontSize1, fontSize2) {
+    return Math.abs(top1 - top2) < (fontSize1 + fontSize2) / 4
+  }
 }
 
-/* Utility functions */
+/* Size utility functions */
 function setPx2mmRatio (width) {
   const pdfContentWidth = pdfSize.width - (
     pdfOptions.padding.left + pdfOptions.padding.right
@@ -175,6 +241,7 @@ function fontSize2px (fontSize) {
   return number
 }
 
+/* Color utility functions */
 function color2rgb (color) {
   let hexColor = color.toString(16)
   if (hexColor.length < 8) {
