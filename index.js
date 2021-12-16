@@ -11,6 +11,7 @@ const pdfOptions = {
     bottom: 0
   }
 }
+const instantExport = 1
 const htmlElement = document.querySelector('.css-17jr04x')
 const {jsPDF} = window.jspdf
 const doc = new jsPDF()
@@ -19,19 +20,44 @@ const doc = new jsPDF()
 let px2mmRatio
 let offsetLeft
 let offsetTop
+let pressedKeys = []
 let textRenderingQueue = []
 
 /* Core */
-window.html2canvas(htmlElement).then(root => {
-  console.log('ROOT >>>', root)
-  setPx2mmRatio(root.bounds.width)
-  setOffset(htmlElement)
-  renderElment(root)
-  renderAllText()
-  setTimeout(_ => {
-    doc.save('a4.pdf')
-  }, 0)
-})
+if (instantExport) exportPdf()
+else {
+  window.addEventListener('keydown', event => {
+    const {key} = event
+    if (!pressedKeys.includes(key)) {
+      pressedKeys.push(key)
+    }
+    if (
+      pressedKeys.includes('p') &&
+      pressedKeys.includes('d') &&
+      pressedKeys.includes('f')
+    ) exportPdf()
+  })
+  window.addEventListener('keyup', event => {
+    const {key} = event
+    if (pressedKeys.includes(key)) {
+      const index = pressedKeys.indexOf(key)
+      pressedKeys.splice(index, 1)
+    }
+  })
+}
+
+function exportPdf () {
+  window.html2canvas(htmlElement).then(root => {
+    console.log('ROOT >>>', root)
+    setPx2mmRatio(root.bounds.width)
+    setOffset(htmlElement)
+    renderElment(root)
+    renderAllText()
+    setTimeout(_ => {
+      doc.save('a4.pdf')
+    }, 0)
+  })
+}
 
 /* Render functions */
 function renderElment (element) {
@@ -114,45 +140,49 @@ function renderImage (properties) {
   } = properties
   if (!src) return
 
-  const isDataImage = /^data\:image/.test(src)
-  if (isDataImage) {
-    const [, imageType] = src.match(/^data\:image\/(.+)\;/)
+  const isWebImage = /^https?:\/\//.test(src)
+  const isDataImage = /^data\:image\//.test(src)
+  let imageType
+  if (isWebImage) {
+    const matchResult = src.match(/[^.]+$/)
+    imageType = matchResult[0]
+  } else if (isDataImage) {
+    const matchResult = src.match(/^data\:image\/(.+)\;/)
+    imageType = matchResult[1]
     switch (imageType) {
-      case 'jpeg':
-      case 'png':
-      case 'webp':
-        _addImage(src, imageType.toUpperCase())
+      case 'svg+xml':
+        imageType = 'png'
         break
-      case 'svg+xml': {
-        const body = document.querySelector('body')
-        const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')
-        const image = new Image()
-        canvas.style.display = 'none'
-        canvas.width = width
-        canvas.height = height
-        body.appendChild(canvas)
-        image.onload = _ => {
-          ctx.drawImage(image, 0, 0, width, height)
-          _addImage(canvas, 'PNG')
-        }
-        image.src = src
-        break
-      }
     }
-  } else {}
+  }
 
-  function _addImage (imageData, format) {
+  const canvas = document.createElement('canvas')
+  canvas.style.display = 'none'
+  canvas.width = width
+  canvas.height = height
+
+  const body = document.querySelector('body')
+  body.appendChild(canvas)
+
+  const image = new Image()
+  image.crossOrigin = 'Anonymous'
+  image.onload = _ => {
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(image, 0, 0, width, height)
     doc.addImage(
-      imageData, format,
+      canvas, imageType.toUpperCase(),
       transformLeft(left), transformTop(top),
       transformSize(width), transformSize(height)
     )
   }
+  image.src = src
 }
 
 function prepareTextRendering (properties) {
-  const {textNodes, color, fontSize} = properties
+  const {
+    textNodes, color,
+    fontSize, fontStyle, fontWeight
+  } = properties
   if (!textNodes.length) return
   const {r, g, b} = color2rgb(color)
   const pxFontSize = fontSize2px(fontSize)
@@ -161,6 +191,7 @@ function prepareTextRendering (properties) {
     const {left, top} = textBounds[0].bounds
     const textRenderingItem = {
       text, textBounds, left, top,
+      fontStyle, fontWeight,
       color: {r, g, b},
       fontSize: pxFontSize
     }
@@ -178,12 +209,16 @@ function renderAllText () {
     return condition
   })
   sortedQueue.forEach(queueItem => {
-    const {color, fontSize, textBounds} = queueItem
+    const {
+      color, textBounds,
+      fontSize, fontStyle, fontWeight
+    } = queueItem
     const {r, g, b} = color
-    doc.setTextColor(r, g, b)
+    doc.setFont('Helvetica', fontStyle, fontWeight)
     doc.setFontSize(transformSize2pt(fontSize))
+    doc.setTextColor(r, g, b)
     textBounds.forEach(textBound => {
-      let {text, bounds} = textBound
+      const {text, bounds} = textBound
       const {left, top, width, height} = bounds
       const x = left + width / 2
       doc.text(
@@ -196,7 +231,7 @@ function renderAllText () {
   })
 
   function _almostSameTop (top1, top2, fontSize1, fontSize2) {
-    return Math.abs(top1 - top2) < (fontSize1 + fontSize2) / 4
+    return Math.abs(top1 - top2) < (fontSize1 + fontSize2) / 2 / 2
   }
 }
 
