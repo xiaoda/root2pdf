@@ -11,7 +11,7 @@ const pdfOptions = {
     bottom: 0
   }
 }
-const instantExport = 1
+const instantExport = 0
 const htmlElement = document.querySelector('.css-17jr04x')
 const {jsPDF} = window.jspdf
 const doc = new jsPDF()
@@ -214,7 +214,7 @@ function renderAllText () {
       fontSize, fontStyle, fontWeight
     } = queueItem
     const {r, g, b} = color
-    doc.setFont('Helvetica', fontStyle, fontWeight)
+    // doc.setFont('Helvetica', fontStyle, fontWeight)
     doc.setFontSize(transformSize2pt(fontSize))
     doc.setTextColor(r, g, b)
     textBounds.forEach(textBound => {
